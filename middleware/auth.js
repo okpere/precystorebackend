@@ -5,18 +5,18 @@ dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_precynails_key_2026';
 
-export const verifyVendorToken = (req, res, next) => {
+export const verifyAdminToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    return res.status(401).json({ error: 'Unauthorized: Admin authentication required' });
   }
 
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.vendor = decoded;
+    req.admin = decoded;
     next();
   } catch (err) {
-    return res.status(403).json({ error: 'Forbidden: Invalid or expired token' });
+    return res.status(403).json({ error: 'Forbidden: Invalid or expired admin token' });
   }
 };

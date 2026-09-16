@@ -2,94 +2,86 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { supabase } from '../config/db.js';
 
 dotenv.config();
+
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_precynails_key_2026';
 
-// Simulated Vendor Accounts Database (Connected to Supabase PostgreSQL)
-const VENDOR_ACCOUNTS = [
-  {
-    email: 'vendor@precynails.ng',
-    handle: '@precynails.ng',
-    shopName: 'PrecyNails Luxury Press-On Studio',
-    passwordHash: bcrypt.hashSync('password123', 10)
-  }
-];
+// Single Admin default credentials fallback
+const DEFAULT_ADMIN = {
+  email: 'vendor@precynails.ng',
+  handle: '@precynails.ng',
+  shopName: 'PrecyNails Studio',
+  password_hash: bcrypt.hashSync('password123', 10)
+};
 
-// Vendor Login Endpoint
-router.post('/login', async (req, res) => {
-  const { emailOrHandle, password } = req.body;
+// POST /api/auth/admin/login — admin login, returns JWT
+router.post('/admin/login', async (req, res) => {
+  const { email, password_hash, password } = req.body;
+  const inputPassword = password || password_hash;
 
-  if (!emailOrHandle || !password) {
-    return res.status(400).json({ error: 'Please provide handle/email and password' });
-  }
-
-  const vendor = VENDOR_ACCOUNTS.find(
-    (v) => v.email.toLowerCase() === emailOrHandle.toLowerCase() || v.handle.toLowerCase() === emailOrHandle.toLowerCase()
-  );
-
-  if (!vendor) {
-    return res.status(401).json({ error: 'Invalid handle/email or password' });
+  if (!email || !inputPassword) {
+    return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const isMatch = await bcrypt.compare(password, vendor.passwordHash);
-  if (!isMatch) {
-    return res.status(401).json({ error: 'Invalid handle/email or password' });
-  }
+  try {
+    // 1. Check Supabase admins table
+    const { data: admin, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .single();
 
-  const token = jwt.sign(
-    { email: vendor.email, handle: vendor.handle, shopName: vendor.shopName },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+    let validAdmin = null;
 
-  res.json({
-    token,
-    user: {
-      email: vendor.email,
-      handle: vendor.handle,
-      shopName: vendor.shopName,
-      isLoggedIn: true
+    if (admin && !error) {
+      const isMatch = bcrypt.compareSync(inputPassword, admin.password_hash);
+      if (isMatch) validAdmin = admin;
+    } else if (email.toLowerCase().trim() === DEFAULT_ADMIN.email) {
+      const isMatch = bcrypt.compareSync(inputPassword, DEFAULT_ADMIN.password_hash);
+      if (isMatch) {
+        validAdmin = {
+          id: 'admin-default-id',
+          email: DEFAULT_ADMIN.email,
+          handle: DEFAULT_ADMIN.handle,
+          shopName: DEFAULT_ADMIN.shopName,
+          role: 'admin'
+        };
+      }
     }
-  });
+
+    if (!validAdmin) {
+      return res.status(401).json({ error: 'Invalid admin credentials' });
+    }
+
+    // Generate JWT Token
+    const token = jwt.sign(
+      { id: validAdmin.id, email: validAdmin.email, role: 'admin' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'Admin authentication successful 💅',
+      token,
+      admin: {
+        id: validAdmin.id,
+        email: validAdmin.email,
+        handle: validAdmin.handle || '@precynails.ng',
+        shopName: validAdmin.shopName || 'PrecyNails Studio',
+        isLoggedIn: true
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error during admin login' });
+  }
 });
 
-// Vendor Registration Endpoint
-router.post('/register', async (req, res) => {
-  const { shopName, email, handle, password } = req.body;
-
-  if (!shopName || !email || !password) {
-    return res.status(400).json({ error: 'Please fill in all required registration fields' });
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const formattedHandle = handle ? (handle.startsWith('@') ? handle : `@${handle}`) : `@${shopName.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-
-  const newVendor = {
-    email,
-    handle: formattedHandle,
-    shopName,
-    passwordHash
-  };
-
-  VENDOR_ACCOUNTS.push(newVendor);
-
-  const token = jwt.sign(
-    { email: newVendor.email, handle: newVendor.handle, shopName: newVendor.shopName },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
-
-  res.status(201).json({
-    token,
-    user: {
-      email: newVendor.email,
-      handle: newVendor.handle,
-      shopName: newVendor.shopName,
-      isLoggedIn: true
-    }
-  });
+// POST /api/auth/admin/logout
+router.post('/admin/logout', (req, res) => {
+  res.json({ message: 'Admin logged out successfully' });
 });
 
 export default router;
