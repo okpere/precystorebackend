@@ -5,21 +5,43 @@ const router = express.Router();
 
 let IN_MEMORY_ORDERS = [];
 
-// GET /api/orders — List all orders (Admin view)
+// GET /api/orders — List all orders directly from Supabase (Admin view)
 router.get('/', async (req, res) => {
   try {
     const { data: orders, error } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !orders || orders.length === 0) {
-      return res.json(IN_MEMORY_ORDERS);
+    if (error) {
+      console.error('❌ Supabase Orders List Error:', error);
+      return res.json([]);
     }
 
-    res.json(orders);
+    if (!orders || orders.length === 0) {
+      return res.json([]);
+    }
+
+    const formattedOrders = orders.map((o) => ({
+      id: o.id,
+      customerName: o.customer_name,
+      customerPhone: o.customer_phone,
+      customerAddress: o.customer_address,
+      items: o.items || [],
+      subtotal: parseFloat(o.subtotal),
+      deliveryFee: parseFloat(o.delivery_fee),
+      discount: parseFloat(o.discount || 0),
+      total: parseFloat(o.total),
+      paymentMethod: o.payment_method,
+      logisticsProvider: o.logistics_provider,
+      status: o.status,
+      createdAt: new Date(o.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+    }));
+
+    res.json(formattedOrders);
   } catch (err) {
-    res.json(IN_MEMORY_ORDERS);
+    console.error('❌ Server Error fetching orders:', err);
+    res.json([]);
   }
 });
 
