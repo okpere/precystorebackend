@@ -1,5 +1,5 @@
 import express from 'express';
-import { verifyVendorToken } from '../middleware/auth.js';
+import { verifyAdminToken, verifyVendorToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -8,13 +8,13 @@ let EXPENSES = [
   { id: '2', title: 'Custom Branded Nail Packaging Boxes & Glue', amount: 24000, date: 'Yesterday' }
 ];
 
-// Get expenses (Vendor Protected)
-router.get('/', verifyVendorToken, (req, res) => {
+// Get expenses (Admin Protected)
+router.get('/', verifyAdminToken, (req, res) => {
   res.json(EXPENSES);
 });
 
-// Add new expense (Vendor Protected)
-router.post('/', verifyVendorToken, (req, res) => {
+// Add new expense (Admin Protected)
+router.post('/', verifyAdminToken, (req, res) => {
   const newExpense = {
     id: Date.now().toString(),
     date: 'Today',
