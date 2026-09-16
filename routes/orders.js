@@ -120,13 +120,23 @@ router.get('/:id', async (req, res) => {
       .eq('id', id)
       .single();
 
-    if (error || !order) {
-      const memOrder = IN_MEMORY_ORDERS.find((o) => o.id === id);
-      if (!memOrder) return res.status(404).json({ error: 'Order not found' });
-      return res.json(memOrder);
-    }
+    const formattedOrder = {
+      id: order.id,
+      customerName: order.customer_name,
+      customerPhone: order.customer_phone,
+      customerAddress: order.customer_address,
+      items: order.items || [],
+      subtotal: parseFloat(order.subtotal),
+      deliveryFee: parseFloat(order.delivery_fee),
+      discount: parseFloat(order.discount || 0),
+      total: parseFloat(order.total),
+      paymentMethod: order.payment_method,
+      logisticsProvider: order.logistics_provider,
+      status: order.status,
+      createdAt: new Date(order.created_at).toLocaleString()
+    };
 
-    res.json(order);
+    res.json(formattedOrder);
   } catch (err) {
     res.status(500).json({ error: 'Error fetching order' });
   }
