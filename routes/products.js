@@ -101,8 +101,14 @@ router.post('/', async (req, res) => {
   try {
     const { name, description, price, originalPrice, stockCount, image, images, category, status, badge, shapes, sizes } = req.body;
 
-    const prodImages = images || (image ? [image] : ['https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=800&q=80']);
-    const mainImage = image || prodImages[0];
+    const defaultFallbackImage = 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=800&q=80';
+    const mainImage = (typeof image === 'string' && image.trim() !== '') 
+      ? image 
+      : (Array.isArray(images) && images.length > 0 && typeof images[0] === 'string' && images[0].trim() !== '') 
+        ? images[0] 
+        : defaultFallbackImage;
+
+    const prodImages = (Array.isArray(images) && images.length > 0) ? images : [mainImage];
 
     const newProd = {
       id: 'n-' + Date.now(),
@@ -123,7 +129,7 @@ router.post('/', async (req, res) => {
 
     IN_MEMORY_PRODUCTS.unshift(newProd);
 
-    await supabase.from('products').insert([
+    const { data: dbData, error: dbError } = await supabase.from('products').insert([
       {
         name,
         description: description || '',
@@ -138,11 +144,18 @@ router.post('/', async (req, res) => {
         shapes: shapes || ['Short Almond', 'Medium Coffin'],
         sizes: sizes || ['XS', 'S', 'M', 'L']
       }
-    ]);
+    ]).select();
+
+    if (dbError) {
+      console.error('❌ Supabase Product Insert Error:', dbError);
+    } else if (dbData && dbData.length > 0) {
+      newProd.id = dbData[0].id;
+    }
 
     res.status(201).json(newProd);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create product' });
+    console.error('❌ API Product Creation Error:', err);
+    res.status(500).json({ error: 'Failed to create product', details: err.message });
   }
 });
 

@@ -62,13 +62,13 @@ router.post('/', async (req, res) => {
     IN_MEMORY_ORDERS.unshift(newOrder);
 
     // Save order to Supabase
-    await supabase.from('orders').insert([
+    const { error: dbError } = await supabase.from('orders').insert([
       {
         id: orderId,
         customer_name: customerName,
         customer_phone: customerPhone,
         customer_address: customerAddress,
-        items: items, // JSONB snapshot of cart line items
+        items: Array.isArray(items) ? items : [],
         subtotal: parseFloat(subtotal),
         delivery_fee: parseFloat(deliveryFee),
         discount: parseFloat(discount || 0),
@@ -80,8 +80,12 @@ router.post('/', async (req, res) => {
       }
     ]);
 
+    if (dbError) {
+      console.error('❌ Supabase Order Insert Error:', dbError);
+    }
+
     // Save individual line items (OrderItem snapshot)
-    if (Array.isArray(items)) {
+    if (Array.isArray(items) && items.length > 0) {
       const orderItemsToInsert = items.map((item) => ({
         order_id: orderId,
         product_id: item.product?.id || null,
@@ -92,12 +96,16 @@ router.post('/', async (req, res) => {
         selected_size: item.selectedSize || null
       }));
 
-      await supabase.from('order_items').insert(orderItemsToInsert);
+      const { error: itemsError } = await supabase.from('order_items').insert(orderItemsToInsert);
+      if (itemsError) {
+        console.error('❌ Supabase Order Items Insert Error:', itemsError);
+      }
     }
 
     res.status(201).json(newOrder);
   } catch (err) {
-    res.status(500).json({ error: 'Failed creating order' });
+    console.error('❌ API Order Creation Error:', err);
+    res.status(500).json({ error: 'Failed creating order', details: err.message });
   }
 });
 
