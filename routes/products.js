@@ -6,6 +6,47 @@ const router = express.Router();
 
 let IN_MEMORY_PRODUCTS = [];
 
+// Helper function: Converts Base64 data URL into a file buffer & uploads to Supabase Storage Bucket 'product-images'
+async function uploadBase64ToSupabaseStorage(base64Str) {
+  if (!base64Str || typeof base64Str !== 'string' || !base64Str.startsWith('data:image/')) {
+    return base64Str;
+  }
+
+  try {
+    const mimeMatch = base64Str.match(/^data:(image\/\w+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const ext = mimeType.split('/')[1] || 'jpg';
+    const base64Data = base64Str.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    const fileName = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${ext}`;
+
+    const { data, error } = await supabase.storage
+      .from('product-images')
+      .upload(fileName, buffer, {
+        contentType: mimeType,
+        upsert: true
+      });
+
+    if (error) {
+      console.warn('⚠️ Supabase Storage Bucket Upload Note:', error.message);
+      return base64Str;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(fileName);
+
+    if (publicUrlData && publicUrlData.publicUrl) {
+      console.log('✅ Image uploaded successfully to Supabase Storage Bucket:', publicUrlData.publicUrl);
+      return publicUrlData.publicUrl;
+    }
+    return base64Str;
+  } catch (err) {
+    console.error('⚠️ Storage upload helper exception:', err);
+    return base64Str;
+  }
+}
+
 // GET /api/products — public, list/search/filter directly from Supabase
 router.get('/', async (req, res) => {
   const { category, search, status } = req.query;
@@ -102,13 +143,16 @@ router.post('/', async (req, res) => {
     const { name, description, price, originalPrice, stockCount, image, images, category, status, badge, shapes, sizes } = req.body;
 
     const defaultFallbackImage = 'https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=800&q=80';
-    const mainImage = (typeof image === 'string' && image.trim() !== '') 
+    let rawMainImage = (typeof image === 'string' && image.trim() !== '') 
       ? image 
       : (Array.isArray(images) && images.length > 0 && typeof images[0] === 'string' && images[0].trim() !== '') 
         ? images[0] 
         : defaultFallbackImage;
 
-    const prodImages = (Array.isArray(images) && images.length > 0) ? images : [mainImage];
+    // Upload base64 image to Supabase Storage Bucket if base64 provided
+    const storedImageUrl = await uploadBase64ToSupabaseStorage(rawMainImage);
+
+    const prodImages = (Array.isArray(images) && images.length > 0) ? images : [storedImageUrl];
 
     const newProd = {
       id: 'n-' + Date.now(),
@@ -117,7 +161,7 @@ router.post('/', async (req, res) => {
       price: parseFloat(price),
       originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
       stockCount: parseInt(stockCount) || 10,
-      image: mainImage,
+      image: storedImageUrl,
       images: prodImages,
       category: category || 'Press-On Sets',
       status: status || (parseInt(stockCount) > 0 ? 'active' : 'out_of_stock'),
@@ -136,7 +180,7 @@ router.post('/', async (req, res) => {
         price: parseFloat(price),
         original_price: originalPrice ? parseFloat(originalPrice) : null,
         stock_count: parseInt(stockCount) || 10,
-        image: mainImage,
+        image: storedImageUrl,
         images: prodImages,
         category: category || 'Press-On Sets',
         status: status || (parseInt(stockCount) > 0 ? 'active' : 'out_of_stock'),
