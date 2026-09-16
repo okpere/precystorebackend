@@ -6,7 +6,7 @@ const router = express.Router();
 
 let IN_MEMORY_PRODUCTS = [];
 
-// GET /api/products — public, list/search/filter
+// GET /api/products — public, list/search/filter directly from Supabase
 router.get('/', async (req, res) => {
   const { category, search, status } = req.query;
 
@@ -18,9 +18,6 @@ router.get('/', async (req, res) => {
     }
     if (status) {
       query = query.eq('status', status);
-    } else {
-      // By default for public customers, return active & out_of_stock products
-      query = query.in('status', ['active', 'out_of_stock']);
     }
     if (search) {
       query = query.ilike('name', `%${search}%`);
@@ -28,15 +25,13 @@ router.get('/', async (req, res) => {
 
     const { data, error } = await query;
 
-    if (error || !data || data.length === 0) {
-      let filtered = IN_MEMORY_PRODUCTS;
-      if (category && category !== 'All') {
-        filtered = filtered.filter((p) => p.category === category);
-      }
-      if (search) {
-        filtered = filtered.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
-      }
-      return res.json(filtered);
+    if (error) {
+      console.error('❌ Supabase GET Products Error:', error);
+      return res.json([]);
+    }
+
+    if (!data || data.length === 0) {
+      return res.json([]);
     }
 
     const formatted = data.map((p) => ({
@@ -46,7 +41,7 @@ router.get('/', async (req, res) => {
       price: parseFloat(p.price),
       originalPrice: p.original_price ? parseFloat(p.original_price) : undefined,
       stockCount: p.stock_count || 10,
-      images: p.images || [p.image],
+      images: p.images || (p.image ? [p.image] : []),
       image: p.image || (p.images ? p.images[0] : ''),
       category: p.category,
       status: p.status || (p.stock_count > 0 ? 'active' : 'out_of_stock'),
@@ -58,7 +53,8 @@ router.get('/', async (req, res) => {
 
     res.json(formatted);
   } catch (err) {
-    res.json(IN_MEMORY_PRODUCTS);
+    console.error('❌ Server Error fetching products:', err);
+    res.json([]);
   }
 });
 
