@@ -11,9 +11,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_precynails_key_2026';
 
 // Single Admin default credentials fallback
 const DEFAULT_ADMIN = {
-  email: 'vendor@precynails.ng',
-  handle: '@precynails.ng',
-  shopName: 'PrecyNails Studio',
+  email: 'finbarzbeautysolutions@gmail.com',
+  handle: '@Clawed.by.Finbarz',
+  shopName: 'Finbarz Beauty Solutions Studio',
   password_hash: bcrypt.hashSync('password123', 10)
 };
 
@@ -69,8 +69,8 @@ router.post('/admin/login', async (req, res) => {
       admin: {
         id: validAdmin.id,
         email: validAdmin.email,
-        handle: validAdmin.handle || '@precynails.ng',
-        shopName: validAdmin.shopName || 'PrecyNails Studio',
+        handle: validAdmin.handle || '@Clawed.by.Finbarz',
+        shopName: validAdmin.shopName || 'Finbarz Beauty Solutions Studio',
         isLoggedIn: true
       }
     });
@@ -132,8 +132,8 @@ router.post('/admin/register', async (req, res) => {
       admin: {
         id: adminId,
         email: formattedEmail,
-        handle: handle || '@precynails.ng',
-        shopName: shopName || 'PrecyNails Studio',
+        handle: handle || '@Clawed.by.Finbarz',
+        shopName: shopName || 'Finbarz Beauty Solutions Studio',
         isLoggedIn: true
       }
     });
