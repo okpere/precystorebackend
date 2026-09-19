@@ -214,20 +214,52 @@ router.put('/:id', async (req, res) => {
       IN_MEMORY_PRODUCTS[memoryIdx] = { ...IN_MEMORY_PRODUCTS[memoryIdx], ...updates };
     }
 
-    await supabase
-      .from('products')
-      .update({
-        name: updates.name,
-        description: updates.description,
-        price: updates.price ? parseFloat(updates.price) : undefined,
-        stock_count: updates.stockCount,
-        status: updates.status,
-        category: updates.category
-      })
-      .eq('id', id);
+    let storedImageUrl = updates.image;
+    if (updates.image && typeof updates.image === 'string' && updates.image.startsWith('data:image/')) {
+      storedImageUrl = await uploadBase64ToSupabaseStorage(updates.image);
+    }
 
-    res.json({ message: 'Product updated successfully', id });
+    const payload = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.description !== undefined) payload.description = updates.description;
+    if (updates.price !== undefined) payload.price = parseFloat(updates.price);
+    if (updates.originalPrice !== undefined) payload.original_price = updates.originalPrice ? parseFloat(updates.originalPrice) : null;
+    if (updates.stockCount !== undefined) {
+      const stock = parseInt(updates.stockCount);
+      payload.stock_count = stock;
+      if (stock <= 0) {
+        payload.status = 'out_of_stock';
+      } else if (!updates.status) {
+        payload.status = 'active';
+      }
+    }
+    if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.category !== undefined) payload.category = updates.category;
+    if (updates.badge !== undefined) payload.badge = updates.badge;
+    if (storedImageUrl !== undefined) {
+      payload.image = storedImageUrl;
+      payload.images = [storedImageUrl];
+    }
+
+    const { data: updatedData, error: dbError } = await supabase
+      .from('products')
+      .update(payload)
+      .eq('id', id)
+      .select();
+
+    if (dbError) {
+      console.error('❌ Supabase Product Update Error:', dbError);
+    }
+
+    res.json({
+      id,
+      ...updates,
+      price: updates.price ? parseFloat(updates.price) : undefined,
+      stockCount: updates.stockCount !== undefined ? parseInt(updates.stockCount) : undefined,
+      image: storedImageUrl
+    });
   } catch (err) {
+    console.error('❌ API Product Update Error:', err);
     res.status(500).json({ error: 'Failed to update product' });
   }
 });
@@ -239,7 +271,8 @@ router.delete('/:id', async (req, res) => {
   try {
     IN_MEMORY_PRODUCTS = IN_MEMORY_PRODUCTS.filter((p) => p.id !== id);
 
-    await supabase.from('products').delete().eq('id', id);
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) console.error('❌ Supabase Delete Error:', error);
 
     res.json({ message: 'Product deleted successfully', id });
   } catch (err) {
